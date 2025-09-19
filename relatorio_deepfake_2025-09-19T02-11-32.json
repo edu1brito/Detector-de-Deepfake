@@ -1,0 +1,11 @@
+{
+  "timestamp": "2025-09-19T02:11:32",
+  "overall_assessment": "MODERADAMENTE SUSPEITO - Alguns indicadores anômalos",
+  "confidence_level": 0.4,
+  "detailed_analysis": {
+    "edge_analysis": {
+      "score": 0.0,
+      "status": "NORMAL",
+      "details": {
+        "avg_score": 0.0,
+        "max_score": 

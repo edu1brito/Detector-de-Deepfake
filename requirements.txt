@@ -1,0 +1,4 @@
+pip install opencv-python
+bashpip install scipy
+bashpip install matplotlib
+bashpip install numpy

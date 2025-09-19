@@ -1,0 +1,67 @@
+{
+  "timestamp": "2025-09-18T23:39:05.880344",
+  "overall_assessment": "ALTAMENTE SUSPEITO - Múltiplos indicadores de manipulação",
+  "confidence_level": 0.6,
+  "detailed_analysis": {
+    "edge_analysis": {
+      "score": 0.06715307305399788,
+      "status": "NORMAL",
+      "details": {
+        "avg_score": 0.06715307305399788,
+        "max_score": 0.08089670989033945,
+        "suspicious_ratio": 0.0,
+        "suspicious": false,
+        "frames_analyzed": 15
+      }
+    },
+    "spectral_analysis": {
+      "score": 0.6776307821273804,
+      "status": "SUSPEITO",
+      "details": {
+        "avg_score": 0.6776307821273804,
+        "max_score": 0.7010582089424133,
+        "suspicious_ratio": 1.0,
+        "suspicious": true,
+        "frames_analyzed": 15
+      }
+    },
+    "color_analysis": {
+      "score": 0.20419585435646048,
+      "status": "SUSPEITO",
+      "details": {
+        "avg_score": 0.20419585435646048,
+        "max_score": 0.2260336833854144,
+        "suspicious_ratio": 0.6666666666666666,
+        "suspicious": true,
+        "frames_analyzed": 15
+      }
+    },
+    "residual_analysis": {
+      "score": 0.14091435770193736,
+      "status": "SUSPEITO",
+      "details": {
+        "avg_score": 0.14091435770193736,
+        "max_score": 0.1481991708278656,
+        "suspicious_ratio": 1.0,
+        "suspicious": true,
+        "frames_analyzed": 15
+      }
+    },
+    "temporal_analysis": {
+      "score": 0.03500701499481996,
+      "status": "NORMAL",
+      "details": {
+        "avg_score": 0.03500701499481996,
+        "max_score": 0.04783809930086136,
+        "suspicious_ratio": 0.0,
+        "suspicious": false,
+        "frames_analyzed": 15
+      }
+    }
+  },
+  "recommendations": [
+    "Verificar com especialista em forense digital",
+    "Analisar metadados do arquivo",
+    "Comparar com outras fontes do mesmo conteúdo"
+  ]
+}

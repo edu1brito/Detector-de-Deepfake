@@ -1,0 +1,66 @@
+{
+  "timestamp": "2025-09-18T23:43:21.311563",
+  "overall_assessment": "MODERADAMENTE SUSPEITO - Alguns indicadores anômalos",
+  "confidence_level": 0.4,
+  "detailed_analysis": {
+    "edge_analysis": {
+      "score": 0.011730270510991571,
+      "status": "NORMAL",
+      "details": {
+        "avg_score": 0.011730270510991571,
+        "max_score": 0.015628037206786856,
+        "suspicious_ratio": 0.0,
+        "suspicious": false,
+        "frames_analyzed": 15
+      }
+    },
+    "spectral_analysis": {
+      "score": 1.0,
+      "status": "SUSPEITO",
+      "details": {
+        "avg_score": 1.0,
+        "max_score": 1.0,
+        "suspicious_ratio": 1.0,
+        "suspicious": true,
+        "frames_analyzed": 15
+      }
+    },
+    "color_analysis": {
+      "score": 0.6119066364898252,
+      "status": "SUSPEITO",
+      "details": {
+        "avg_score": 0.6119066364898252,
+        "max_score": 0.6502654530691591,
+        "suspicious_ratio": 1.0,
+        "suspicious": true,
+        "frames_analyzed": 15
+      }
+    },
+    "residual_analysis": {
+      "score": 0.07719263434410095,
+      "status": "NORMAL",
+      "details": {
+        "avg_score": 0.07719263434410095,
+        "max_score": 0.08114883303642273,
+        "suspicious_ratio": 0.0,
+        "suspicious": false,
+        "frames_analyzed": 15
+      }
+    },
+    "temporal_analysis": {
+      "score": 0.03613895773887634,
+      "status": "NORMAL",
+      "details": {
+        "avg_score": 0.03613895773887634,
+        "max_score": 0.049478497356176376,
+        "suspicious_ratio": 0.0,
+        "suspicious": false,
+        "frames_analyzed": 15
+      }
+    }
+  },
+  "recommendations": [
+    "Verificação adicional recomendada",
+    "Comparar qualidade com vídeos similares da mesma fonte"
+  ]
+}
