@@ -1,5 +1,10 @@
+
+(instalar um de cada vez pq se não buga)
+
+
 pip install opencv-python
 pip install scipy
 pip install matplotlib
 
 pip install numpy
+
