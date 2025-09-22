@@ -402,7 +402,7 @@ Contribuições são bem-vindas! Este projeto é acadêmico e visa demonstrar t�
 
 ### Como Contribuir
 1. **Fork** o projeto
-2. **Clone** o repositório: `git clone https://github.com/seu-usuario/deepfake-detector.git`
+2. **Clone** o repositório: `git clone https://github.com/edu1brito/Detector-de-Deepfake/`
 3. **Crie uma branch** para sua feature: `git checkout -b feature/nova-analise`
 4. **Commit** suas mudanças: `git commit -m 'Adiciona análise de textura'`
 5. **Push** para a branch: `git push origin feature/nova-analise`
@@ -445,7 +445,7 @@ def nova_analise(self, roi):
 ## 📞 Suporte e Documentação
 
 ### Recursos Adicionais
-- **Issues:** [Reporte bugs ou solicite features](https://github.com/seu-usuario/deepfake-detector/issues)
+- **Issues:** [Reporte bugs ou solicite features]([https://github.com/seu-usuario/deepfake-detector/issues](https://github.com/edu1brito/Detector-de-Deepfake/issues)
 - **Wiki:** Documentação técnica detalhada
 - **Exemplos:** Pasta `exemplos/` com casos de teste
 - **Artigos:** Referências científicas sobre detecção de deepfakes
@@ -491,7 +491,7 @@ copies or substantial portions of the Software.
 
 **Desenvolvido para:** Disciplina de Visão Computacional  
 **Ano:** 2024  
-**Instituição:** [Nome da Universidade/Curso]
+**Instituição:** UNDB/ ENGENHARIA DE SOFTWARE
 
 ### Reconhecimentos
 - OpenCV Community pela biblioteca de visão computacional
