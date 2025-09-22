@@ -568,8 +568,11 @@ def main():
                                 dct_variance = details.get('dct_variance', 0)
                                 freq_interp = details.get('freq_interpretation', 'N/A')
                                 dct_interp = details.get('dct_interpretation', 'N/A')
-                                print(f"   → Razão alta/baixa frequência: {freq_ratio:.6f} ({freq_interp})")
-                                print(f"   → Variância DCT: {dct_variance:.6f} ({dct_interp})")
+                                print(f"   → Razão alta/baixa frequência: {freq_ratio:.6f}")
+                                print(f"     📊 Referência: Normal 0.01-0.5 | Suspeito <0.001 ou >0.5")
+                                print(f"   → Interpretação: {freq_interp}")
+                                print(f"   → Variância DCT: {dct_variance:.6f}")
+                                print(f"     📊 Referência: Normal 0.001-0.1 | Suspeito <0.001 ou >0.1")
                                 print(f"   → Problema: {freq_interp if 'possível' in freq_interp else dct_interp}")
                                 
                             elif analysis_name == 'color_analysis':
@@ -577,21 +580,27 @@ def main():
                                 sat_mean = details.get('saturation_mean', 0)
                                 sat_interp = details.get('saturation_interpretation', 'N/A')
                                 print(f"   → Inconsistência média: {avg_inconsistency:.4f}")
-                                print(f"   → Saturação média: {sat_mean:.1f} ({sat_interp})")
+                                print(f"     📊 Referência: Normal <0.2 | Suspeito >0.2")
+                                print(f"   → Saturação média: {sat_mean:.1f}")
+                                print(f"     📊 Referência: Normal 50-200 | Suspeito <50 ou >200")
                                 print(f"   → Problema: Cores inconsistentes entre centro e bordas da face")
                                 
                                 # Mostra problemas por canal
                                 channel_stats = details.get('channel_stats', {})
                                 for channel, stats in channel_stats.items():
                                     if stats.get('interpretation', '') != 'Normal':
+                                        mean_diff = stats.get('mean_diff', 0)
                                         print(f"     • Canal {channel}: {stats['interpretation']}")
+                                        print(f"       Diferença: {mean_diff:.1f} (Ref: Normal <20)")
                                         
                             elif analysis_name == 'temporal_analysis':
                                 avg_flicker = details.get('avg_flicker', 0)
                                 frames_analyzed = details.get('frames_analyzed', 0)
                                 temporal_variance = details.get('temporal_variance', 0)
                                 print(f"   → Flicker médio: {avg_flicker:.4f}")
+                                print(f"     📊 Referência: Normal <0.1 | Suspeito >0.1")
                                 print(f"   → Variância temporal: {temporal_variance:.6f}")
+                                print(f"     📊 Referência: Normal <0.01 | Suspeito >0.01")
                                 print(f"   → Frames analisados: {frames_analyzed}")
                                 print(f"   → Problema: Instabilidade temporal entre frames consecutivos")
                                 
@@ -599,7 +608,9 @@ def main():
                                 residual_std = details.get('residual_std', 0)
                                 residual_mean = details.get('residual_mean', 0)
                                 print(f"   → Desvio residual: {residual_std:.2f}")
+                                print(f"     📊 Referência: Normal <5.0 | Suspeito >5.0")
                                 print(f"   → Média residual: {residual_mean:.2f}")
+                                print(f"     📊 Referência: Normal <10.0 | Suspeito >10.0")
                                 print(f"   → Problema: Possíveis halos ou transições artificiais")
                             
                             suspicious_found.append(name)
@@ -783,18 +794,203 @@ def main():
             
             try:
                 frame = cv2.imread(image_path)
+                if frame is None:
+                    print("❌ Não foi possível carregar imagem")
+                    continue
+                
+                print(f"\n🔄 Analisando imagem: {os.path.basename(image_path)}")
+                
+                # Informações do arquivo
+                try:
+                    file_size = os.path.getsize(image_path) / (1024 * 1024)  # MB
+                    height, width = frame.shape[:2]
+                    print(f"📦 Arquivo: {file_size:.1f} MB • {width}x{height}")
+                except:
+                    pass
+                
                 analysis = detector.analyze_frame(frame)
                 
-                analyses = {
-                    'edge_analysis': analysis.get('edge_analysis', {}),
-                    'spectral_analysis': analysis.get('spectral_analysis', {}),
-                    'color_analysis': analysis.get('color_analysis', {}),
-                    'residual_analysis': analysis.get('residual_analysis', {})
-                }
+                # Monta o dicionário de análises SEM agregação
+                analyses = {}
+                for analysis_type in ['edge_analysis', 'spectral_analysis', 'color_analysis', 'residual_analysis']:
+                    if analysis_type in analysis and isinstance(analysis[analysis_type], dict):
+                        # Pega o score correto baseado no nome da chave
+                        analysis_data = analysis[analysis_type]
+                        
+                        # Mapeia o nome correto do score
+                        score = 0
+                        if 'edge_score' in analysis_data:
+                            score = analysis_data['edge_score']
+                        elif 'spectral_score' in analysis_data:
+                            score = analysis_data['spectral_score']  
+                        elif 'color_score' in analysis_data:
+                            score = analysis_data['color_score']
+                        elif 'residual_score' in analysis_data:
+                            score = analysis_data['residual_score']
+                        elif 'score' in analysis_data:
+                            score = analysis_data['score']
+                        
+                        # Cria estrutura padronizada para o relatório
+                        analyses[analysis_type] = {
+                            'score': float(score),
+                            'details': analysis_data.get('details', {})
+                        }
                 
                 report = detector.generate_report(analyses)
-                print(f"\n🎯 {report['overall_assessment']}")
-                print(f"📊 Confiança: {report['confidence_level']:.2f}")
+                
+                print(f"\n{'='*60}")
+                print(f"📋 RELATÓRIO DE ANÁLISE - IMAGEM")
+                print(f"{'='*60}")
+                print(f"🎯 AVALIAÇÃO: {report['overall_assessment']}")
+                print(f"📊 CONFIANÇA: {report['confidence_level']:.2f}")
+                print(f"📁 ARQUIVO: {os.path.basename(image_path)}")
+                
+                print(f"\n{'='*40}")
+                print(f"🔍 INDICADORES ANALISADOS:")
+                print(f"{'='*40}")
+                
+                # Detalhes de cada análise
+                suspicious_found = []
+                normal_found = []
+                
+                friendly_names = {
+                    'edge_analysis': '🔲 Análise de Bordas',
+                    'spectral_analysis': '📊 Análise Espectral (FFT/DCT)',
+                    'color_analysis': '🎨 Consistência de Cores',
+                    'residual_analysis': '🔍 Filtro Mediano (Halos)'
+                }
+                
+                for analysis_name, result in report['detailed_analysis'].items():
+                    score = result['score']
+                    status = result['status']
+                    name = friendly_names.get(analysis_name, analysis_name)
+                    
+                    if status == 'SUSPEITO':
+                        print(f"🚨 {name}")
+                        print(f"   Status: {status} | Score: {score:.3f}")
+                        
+                        details = result.get('details', {})
+                        if analysis_name == 'edge_analysis':
+                            edge_density = details.get('edge_density', 0)
+                            edge_variance = details.get('edge_variance', 0)
+                            print(f"   → Densidade de bordas: {edge_density:.4f}")
+                            print(f"     📊 Referência: Normal 0.05-0.15 | Suspeito >0.25")
+                            print(f"   → Variância de bordas: {edge_variance:.2f}")
+                            print(f"     📊 Referência: Normal <5000 | Suspeito >15000")
+                            print(f"   → Problema: Bordas inconsistentes ou muito regulares")
+                            
+                        elif analysis_name == 'spectral_analysis':
+                            freq_ratio = details.get('freq_ratio', 0)
+                            dct_variance = details.get('dct_variance', 0)
+                            freq_interp = details.get('freq_interpretation', 'N/A')
+                            dct_interp = details.get('dct_interpretation', 'N/A')
+                            print(f"   → Razão alta/baixa frequência: {freq_ratio:.6f}")
+                            print(f"     📊 Referência: Normal 0.01-0.5 | Suspeito <0.001 ou >0.5")
+                            print(f"   → Interpretação: {freq_interp}")
+                            print(f"   → Variância DCT: {dct_variance:.6f}")
+                            print(f"     📊 Referência: Normal 0.001-0.1 | Suspeito <0.001 ou >0.1")
+                            print(f"   → Interpretação: {dct_interp}")
+                            
+                        elif analysis_name == 'color_analysis':
+                            avg_inconsistency = details.get('average_inconsistency', 0)
+                            sat_mean = details.get('saturation_mean', 0)
+                            sat_interp = details.get('saturation_interpretation', 'N/A')
+                            print(f"   → Inconsistência média: {avg_inconsistency:.4f}")
+                            print(f"     📊 Referência: Normal <0.2 | Suspeito >0.2")
+                            print(f"   → Saturação média: {sat_mean:.1f}")
+                            print(f"     📊 Referência: Normal 50-200 | Suspeito <50 ou >200")
+                            print(f"   → Interpretação: {sat_interp}")
+                            
+                            # Mostra problemas por canal
+                            channel_stats = details.get('channel_stats', {})
+                            for channel, stats in channel_stats.items():
+                                interpretation = stats.get('interpretation', 'Normal')
+                                if interpretation != 'Normal':
+                                    mean_diff = stats.get('mean_diff', 0)
+                                    print(f"     • Canal {channel}: {interpretation}")
+                                    print(f"       Diferença: {mean_diff:.1f} (Ref: Normal <20)")
+                                    
+                        elif analysis_name == 'residual_analysis':
+                            residual_std = details.get('residual_std', 0)
+                            residual_mean = details.get('residual_mean', 0)
+                            print(f"   → Desvio residual: {residual_std:.2f}")
+                            print(f"     📊 Referência: Normal <5.0 | Suspeito >5.0")
+                            print(f"   → Média residual: {residual_mean:.2f}")
+                            print(f"     📊 Referência: Normal <10.0 | Suspeito >10.0")
+                            print(f"   → Problema: Possíveis halos ou transições artificiais")
+                        
+                        suspicious_found.append(name)
+                        
+                    else:
+                        print(f"✅ {name}")
+                        print(f"   Status: {status} | Score: {score:.3f}")
+                        normal_found.append(name)
+                
+                print(f"\n{'='*40}")
+                print(f"📈 RESUMO:")
+                print(f"{'='*40}")
+                print(f"🚨 Indicadores SUSPEITOS ({len(suspicious_found)}):")
+                for indicator in suspicious_found:
+                    print(f"   • {indicator}")
+                
+                print(f"\n✅ Indicadores NORMAIS ({len(normal_found)}):")
+                for indicator in normal_found:
+                    print(f"   • {indicator}")
+                
+                print(f"\n{'='*40}")
+                print(f"💡 RECOMENDAÇÕES:")
+                print(f"{'='*40}")
+                for i, rec in enumerate(report['recommendations'], 1):
+                    print(f"{i}. {rec}")
+                
+                # Interpretação do nível de confiança
+                confidence = report['confidence_level']
+                print(f"\n📊 INTERPRETAÇÃO DA CONFIANÇA ({confidence:.2f}):")
+                if confidence >= 0.7:
+                    print("   🔴 ALTA - Forte evidência de manipulação")
+                elif confidence >= 0.4:
+                    print("   🟡 MÉDIA - Alguns sinais suspeitos, investigar mais")
+                else:
+                    print("   🟢 BAIXA - Poucos sinais de manipulação")
+                
+                print(f"\n{'='*40}")
+                print(f"🎯 CONTEXTO PARA IMAGENS:")
+                print(f"{'='*40}")
+                print(f"📸 Imagens estáticas não possuem componente temporal")
+                print(f"🔍 Foco nas análises: Bordas, Espectral, Cores e Residual")
+                print(f"⚠️  Qualidade da imagem afeta significativamente os resultados")
+                if len(suspicious_found) >= 2:
+                    print(f"🚨 Múltiplos indicadores sugerem possível edição")
+                elif len(suspicious_found) >= 1:
+                    print(f"🔍 Um indicador pode ser devido à compressão/qualidade")
+                else:
+                    print(f"✅ Padrões consistentes com imagem autêntica")
+                
+                # Salva relatório
+                filename = f"relatorio_imagem_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                with open(filename, 'w', encoding='utf-8') as f:
+                    json.dump(report, f, indent=2, ensure_ascii=False, default=str)
+                print(f"\n💾 Relatório completo salvo: {filename}")
+                
+                # Pergunta se quer ver dados técnicos
+                tech_details = input(f"\n🔧 Mostrar dados técnicos detalhados? (s/n): ").lower().strip()
+                if tech_details == 's':
+                    print(f"\n{'='*40}")
+                    print(f"🔧 DADOS TÉCNICOS:")
+                    print(f"{'='*40}")
+                    for analysis_name, result in report['detailed_analysis'].items():
+                        details = result.get('details', {})
+                        print(f"\n{analysis_name.replace('_', ' ').title()}:")
+                        if isinstance(details, dict):
+                            for key, value in details.items():
+                                if isinstance(value, dict):
+                                    print(f"  {key}:")
+                                    for subkey, subvalue in value.items():
+                                        print(f"    {subkey}: {subvalue}")
+                                else:
+                                    print(f"  {key}: {value}")
+                        else:
+                            print(f"  {details}")
                 
             except Exception as e:
                 print(f"❌ Erro: {e}")
