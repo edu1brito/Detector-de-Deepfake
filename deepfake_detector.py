@@ -1,5 +1,6 @@
 """
-Detector de Deepfakes - Versão Final Corrigida
+Detector de Deepfakes - Versão com Correções Essenciais
+
 """
 
 import cv2
@@ -21,12 +22,13 @@ class DeepfakeDetector:
             print(f"❌ Erro OpenCV: {e}")
             return
             
+        # Thresholds corrigidos - valores mais baixos e sensíveis
         self.thresholds = {
-            'edge_inconsistency': 0.25,
-            'spectral_anomaly': 0.35,
-            'color_variance': 0.2,
-            'temporal_flicker': 0.1,
-            'optical_flow_anomaly': 0.3
+            'edge_inconsistency': 0.12,      # era 0.25
+            'spectral_anomaly': 0.18,        # era 0.35
+            'color_variance': 0.15,          # era 0.2
+            'temporal_flicker': 0.08,        # era 0.1
+            'optical_flow_anomaly': 0.25     # era 0.3
         }
         
         self.frame_history = []
@@ -69,7 +71,8 @@ class DeepfakeDetector:
         edge_density = np.sum(canny_edges > 0) / (canny_edges.shape[0] * canny_edges.shape[1])
         edge_variance = np.var(sobel_magnitude)
         
-        edge_score = min(edge_density * edge_variance / 10000, 1.0)
+        # Score corrigido - melhor normalização
+        edge_score = min((edge_density * 3.0) + (edge_variance / 8000.0), 1.0)
         
         details = {
             'edge_density': float(edge_density),
@@ -83,36 +86,42 @@ class DeepfakeDetector:
         if roi is None:
             return {'spectral_score': 0, 'details': 'ROI não encontrada'}
             
-        gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY).astype(np.float32)
+        gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY).astype(np.float64)
         
-        # Normaliza para evitar valores muito altos
-        gray_roi = gray_roi / 255.0
+        # Normalização melhorada para evitar valores zerados
+        gray_roi = (gray_roi - np.mean(gray_roi)) / (np.std(gray_roi) + 1e-6)
         
         f_transform = fft2(gray_roi)
         f_magnitude = np.abs(f_transform)
         
-        freqs = fftfreq(gray_roi.shape[0])
+        h, w = gray_roi.shape
         
-        # Melhora o cálculo de energia evitando divisão por zero
-        low_freq_energy = np.sum(f_magnitude[:len(freqs)//4, :len(freqs)//4])
-        high_freq_energy = np.sum(f_magnitude[3*len(freqs)//4:, 3*len(freqs)//4:])
+        # Regiões de frequência corrigidas
+        low_freq_energy = np.sum(f_magnitude[:h//8, :w//8] ** 2)
+        high_freq_energy = np.sum(f_magnitude[7*h//8:, 7*w//8:] ** 2)
+        total_energy = np.sum(f_magnitude ** 2)
         
-        if low_freq_energy > 1e-10:  # Evita divisão por zero
-            freq_ratio = high_freq_energy / low_freq_energy
+        # Evita divisão por zero
+        if total_energy > 1e-10:
+            freq_ratio = high_freq_energy / (low_freq_energy + 1e-10)
         else:
             freq_ratio = 0.0
             
-        dct_coeffs = cv2.dct(gray_roi)
-        dct_variance = np.var(dct_coeffs)
+        # DCT corrigido
+        try:
+            dct_coeffs = cv2.dct(gray_roi.astype(np.float32))
+            dct_variance = np.var(dct_coeffs)
+        except:
+            dct_variance = 0.0
         
-        # Melhora o cálculo do score
-        spectral_score = min(abs(0.1 - freq_ratio) * 2 + dct_variance * 1000, 1.0)
+        # Score corrigido - melhor normalização
+        spectral_score = min(abs(0.1 - freq_ratio) + (dct_variance * 100.0), 1.0)
         
-        # Interpreta os valores
+        # Interpretações
         freq_interpretation = ""
-        if freq_ratio < 0.001:
+        if freq_ratio < 0.01:
             freq_interpretation = "Muito baixa - possível suavização excessiva"
-        elif freq_ratio > 0.5:
+        elif freq_ratio > 1.0:
             freq_interpretation = "Muito alta - possível ruído artificial"
         else:
             freq_interpretation = "Normal"
@@ -120,7 +129,7 @@ class DeepfakeDetector:
         dct_interpretation = ""
         if dct_variance < 0.001:
             dct_interpretation = "Muito baixa - possível compressão artificial"
-        elif dct_variance > 0.1:
+        elif dct_variance > 0.01:
             dct_interpretation = "Muito alta - possível artefatos de edição"
         else:
             dct_interpretation = "Normal"
@@ -161,13 +170,12 @@ class DeepfakeDetector:
             mean_diff = abs(roi_mean - center_mean)
             std_ratio = center_std / (roi_std + 1e-8)
             
-            # Calcula inconsistência individual do canal
-            channel_inconsistency = (mean_diff / 255.0) + abs(1.0 - std_ratio)
+            # Inconsistência corrigida
+            channel_inconsistency = (mean_diff / 255.0) + abs(1.0 - std_ratio) * 0.5
             total_inconsistency += channel_inconsistency
             
-            # Interpretação do canal
             interpretation = ""
-            if mean_diff > 20:
+            if mean_diff > 15:
                 interpretation = "Diferença significativa centro-borda"
             elif abs(1.0 - std_ratio) > 0.3:
                 interpretation = "Variação de textura anômala"
@@ -185,16 +193,16 @@ class DeepfakeDetector:
                 'interpretation': interpretation
             }
         
-        # Score baseado na soma das inconsistências
-        color_score = min(total_inconsistency / 3.0, 1.0)  # Média dos 3 canais
+        # Score normalizado
+        color_score = min(total_inconsistency / 3.0, 1.0)
         
-        # Análise adicional de saturação
+        # Análise de saturação
         saturation = hsv_roi[:, :, 1]
         sat_mean = np.mean(saturation)
         sat_std = np.std(saturation)
         
         sat_interpretation = ""
-        if sat_mean < 50:
+        if sat_mean < 40:
             sat_interpretation = "Muito baixa - possível dessaturação artificial"
         elif sat_mean > 200:
             sat_interpretation = "Muito alta - possível saturação artificial"
@@ -225,12 +233,13 @@ class DeepfakeDetector:
         residual_mean = np.mean(residual)
         residual_std = np.std(residual)
         
-        residual_score = min(residual_std / 50.0, 1.0)
+        # Score corrigido
+        residual_score = min((residual_std / 15.0) + (residual_mean / 20.0), 1.0)
         
         details = {
             'residual_mean': float(residual_mean),
             'residual_std': float(residual_std),
-            'suspicious': residual_score > 0.1
+            'suspicious': residual_score > 0.08  # threshold mais baixo
         }
         
         return {'residual_score': float(residual_score), 'details': details}
@@ -353,7 +362,7 @@ class DeepfakeDetector:
             }
         
         avg_score = float(total_score / len(analyses)) if analyses else 0.0
-        confidence = float(min(suspicious_indicators / len(analyses), 1.0)) if analyses else 0.0
+        confidence = float(suspicious_indicators / len(analyses)) if analyses else 0.0
         
         if suspicious_indicators >= 3:
             assessment = 'ALTAMENTE SUSPEITO - Múltiplos indicadores de manipulação'
@@ -466,7 +475,7 @@ class DeepfakeDetector:
 
 def main():
     print("="*60)
-    print("🔍 DETECTOR DE DEEPFAKES - VERSÃO FINAL")
+    print("🔍 DETECTOR DE DEEPFAKES - VERSÃO CORRIGIDA")
     print("="*60)
     
     detector = DeepfakeDetector()
@@ -506,130 +515,29 @@ def main():
                     print(f"📊 CONFIANÇA: {report['confidence_level']:.2f}")
                     print(f"📁 ARQUIVO: {os.path.basename(video_path)}")
                     
-                    # Adiciona informações do arquivo
-                    try:
-                        file_size = os.path.getsize(video_path) / (1024 * 1024)  # MB
-                        print(f"📦 TAMANHO: {file_size:.1f} MB")
-                        
-                        # Informações do vídeo
-                        cap_info = cv2.VideoCapture(video_path)
-                        if cap_info.isOpened():
-                            fps = cap_info.get(cv2.CAP_PROP_FPS)
-                            frame_count_total = int(cap_info.get(cv2.CAP_PROP_FRAME_COUNT))
-                            width = int(cap_info.get(cv2.CAP_PROP_FRAME_WIDTH))
-                            height = int(cap_info.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                            duration = frame_count_total / fps if fps > 0 else 0
-                            
-                            print(f"🎬 RESOLUÇÃO: {width}x{height}")
-                            print(f"⏱️ DURAÇÃO: {duration:.1f}s ({frame_count_total} frames)")
-                            print(f"🔄 FPS: {fps:.1f}")
-                            cap_info.release()
-                    except:
-                        pass
-                    
                     print(f"\n{'='*40}")
                     print(f"🔍 INDICADORES ANALISADOS:")
                     print(f"{'='*40}")
                     
-                    # Mostra detalhes de cada análise
-                    suspicious_found = []
-                    normal_found = []
+                    friendly_names = {
+                        'edge_analysis': '🔲 Análise de Bordas',
+                        'spectral_analysis': '📊 Análise Espectral (FFT/DCT)',
+                        'color_analysis': '🎨 Consistência de Cores',
+                        'residual_analysis': '🔍 Filtro Mediano (Halos)',
+                        'temporal_analysis': '⏱️ Estabilidade Temporal'
+                    }
                     
                     for analysis_name, result in report['detailed_analysis'].items():
                         score = result['score']
                         status = result['status']
-                        
-                        # Nome amigável para cada análise
-                        friendly_names = {
-                            'edge_analysis': '🔲 Análise de Bordas',
-                            'spectral_analysis': '📊 Análise Espectral (FFT/DCT)',
-                            'color_analysis': '🎨 Consistência de Cores',
-                            'residual_analysis': '🔍 Filtro Mediano (Halos)',
-                            'temporal_analysis': '⏱️ Estabilidade Temporal'
-                        }
-                        
                         name = friendly_names.get(analysis_name, analysis_name)
                         
                         if status == 'SUSPEITO':
                             print(f"🚨 {name}")
                             print(f"   Status: {status} | Score: {score:.3f}")
-                            
-                            # Detalhes específicos por tipo de análise
-                            details = result.get('details', {})
-                            if analysis_name == 'edge_analysis':
-                                edge_density = details.get('edge_density', 0)
-                                edge_variance = details.get('edge_variance', 0)
-                                print(f"   → Densidade de bordas: {edge_density:.4f}")
-                                print(f"   → Variância de bordas: {edge_variance:.2f}")
-                                print(f"   → Problema: Bordas inconsistentes ou muito regulares")
-                                
-                            elif analysis_name == 'spectral_analysis':
-                                freq_ratio = details.get('freq_ratio', 0)
-                                dct_variance = details.get('dct_variance', 0)
-                                freq_interp = details.get('freq_interpretation', 'N/A')
-                                dct_interp = details.get('dct_interpretation', 'N/A')
-                                print(f"   → Razão alta/baixa frequência: {freq_ratio:.6f}")
-                                print(f"     📊 Referência: Normal 0.01-0.5 | Suspeito <0.001 ou >0.5")
-                                print(f"   → Interpretação: {freq_interp}")
-                                print(f"   → Variância DCT: {dct_variance:.6f}")
-                                print(f"     📊 Referência: Normal 0.001-0.1 | Suspeito <0.001 ou >0.1")
-                                print(f"   → Problema: {freq_interp if 'possível' in freq_interp else dct_interp}")
-                                
-                            elif analysis_name == 'color_analysis':
-                                avg_inconsistency = details.get('average_inconsistency', 0)
-                                sat_mean = details.get('saturation_mean', 0)
-                                sat_interp = details.get('saturation_interpretation', 'N/A')
-                                print(f"   → Inconsistência média: {avg_inconsistency:.4f}")
-                                print(f"     📊 Referência: Normal <0.2 | Suspeito >0.2")
-                                print(f"   → Saturação média: {sat_mean:.1f}")
-                                print(f"     📊 Referência: Normal 50-200 | Suspeito <50 ou >200")
-                                print(f"   → Problema: Cores inconsistentes entre centro e bordas da face")
-                                
-                                # Mostra problemas por canal
-                                channel_stats = details.get('channel_stats', {})
-                                for channel, stats in channel_stats.items():
-                                    if stats.get('interpretation', '') != 'Normal':
-                                        mean_diff = stats.get('mean_diff', 0)
-                                        print(f"     • Canal {channel}: {stats['interpretation']}")
-                                        print(f"       Diferença: {mean_diff:.1f} (Ref: Normal <20)")
-                                        
-                            elif analysis_name == 'temporal_analysis':
-                                avg_flicker = details.get('avg_flicker', 0)
-                                frames_analyzed = details.get('frames_analyzed', 0)
-                                temporal_variance = details.get('temporal_variance', 0)
-                                print(f"   → Flicker médio: {avg_flicker:.4f}")
-                                print(f"     📊 Referência: Normal <0.1 | Suspeito >0.1")
-                                print(f"   → Variância temporal: {temporal_variance:.6f}")
-                                print(f"     📊 Referência: Normal <0.01 | Suspeito >0.01")
-                                print(f"   → Frames analisados: {frames_analyzed}")
-                                print(f"   → Problema: Instabilidade temporal entre frames consecutivos")
-                                
-                            elif analysis_name == 'residual_analysis':
-                                residual_std = details.get('residual_std', 0)
-                                residual_mean = details.get('residual_mean', 0)
-                                print(f"   → Desvio residual: {residual_std:.2f}")
-                                print(f"     📊 Referência: Normal <5.0 | Suspeito >5.0")
-                                print(f"   → Média residual: {residual_mean:.2f}")
-                                print(f"     📊 Referência: Normal <10.0 | Suspeito >10.0")
-                                print(f"   → Problema: Possíveis halos ou transições artificiais")
-                            
-                            suspicious_found.append(name)
-                            
                         else:
                             print(f"✅ {name}")
                             print(f"   Status: {status} | Score: {score:.3f}")
-                            normal_found.append(name)
-                    
-                    print(f"\n{'='*40}")
-                    print(f"📈 RESUMO:")
-                    print(f"{'='*40}")
-                    print(f"🚨 Indicadores SUSPEITOS ({len(suspicious_found)}):")
-                    for indicator in suspicious_found:
-                        print(f"   • {indicator}")
-                    
-                    print(f"\n✅ Indicadores NORMAIS ({len(normal_found)}):")
-                    for indicator in normal_found:
-                        print(f"   • {indicator}")
                     
                     print(f"\n{'='*40}")
                     print(f"💡 RECOMENDAÇÕES:")
@@ -637,72 +545,10 @@ def main():
                     for i, rec in enumerate(report['recommendations'], 1):
                         print(f"{i}. {rec}")
                     
-                    # Interpretação do nível de confiança
-                    confidence = report['confidence_level']
-                    print(f"\n📊 INTERPRETAÇÃO DA CONFIANÇA ({confidence:.2f}):")
-                    if confidence >= 0.7:
-                        print("   🔴 ALTA - Forte evidência de manipulação")
-                    elif confidence >= 0.4:
-                        print("   🟡 MÉDIA - Alguns sinais suspeitos, investigar mais")
-                    else:
-                        print("   🟢 BAIXA - Poucos sinais de manipulação")
-                    
-                    # Adiciona uma seção sobre a qualidade da detecção
-                    print(f"\n{'='*40}")
-                    print(f"🎯 QUALIDADE DA DETECÇÃO:")
-                    print(f"{'='*40}")
-                    
-                    # Analisa quantos frames tiveram face detectada
-                    total_frames = max_frames
-                    successful_detections = len([a for a in report.get('frame_analyses', []) if a.get('roi_coords')])
-                    
-                    print(f"📊 Frames processados: {total_frames}")
-                    print(f"👤 Faces detectadas: Dados agregados disponíveis")
-                    
-                    # Dicas de interpretação
-                    if len(suspicious_found) >= 3:
-                        print(f"⚠️  ATENÇÃO: Múltiplos indicadores suspeitos detectados")
-                        print(f"   → Recomenda-se investigação mais aprofundada")
-                        print(f"   → Compare com vídeos similares da mesma fonte")
-                    elif len(suspicious_found) >= 1:
-                        print(f"🔍 Alguns indicadores anômalos encontrados")
-                        print(f"   → Pode ser devido à qualidade/compressão do arquivo")
-                        print(f"   → Verifique se é um padrão consistente")
-                    else:
-                        print(f"✅ Nenhum indicador forte de manipulação")
-                        print(f"   → Padrões consistentes com vídeo autêntico")
-                    
-                    # Contexto sobre GIFs
-                    if video_path.lower().endswith('.gif'):
-                        print(f"\n💡 NOTA SOBRE GIFs:")
-                        print(f"   → GIFs têm compressão pesada que pode causar falsos positivos")
-                        print(f"   → Foque nos indicadores temporais e de bordas")
-                        print(f"   → Espectral e cor podem ser menos confiáveis")
-                    
                     filename = f"relatorio_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
                     with open(filename, 'w', encoding='utf-8') as f:
                         json.dump(report, f, indent=2, ensure_ascii=False, default=str)
                     print(f"\n💾 Relatório completo salvo: {filename}")
-                    
-                    # Pergunta se quer ver dados técnicos
-                    tech_details = input(f"\n🔧 Mostrar dados técnicos detalhados? (s/n): ").lower().strip()
-                    if tech_details == 's':
-                        print(f"\n{'='*40}")
-                        print(f"🔧 DADOS TÉCNICOS:")
-                        print(f"{'='*40}")
-                        for analysis_name, result in report['detailed_analysis'].items():
-                            details = result.get('details', {})
-                            print(f"\n{analysis_name.replace('_', ' ').title()}:")
-                            if isinstance(details, dict):
-                                for key, value in details.items():
-                                    if isinstance(value, dict):
-                                        print(f"  {key}:")
-                                        for subkey, subvalue in value.items():
-                                            print(f"    {subkey}: {subvalue}")
-                                    else:
-                                        print(f"  {key}: {value}")
-                            else:
-                                print(f"  {details}")
                     
             except Exception as e:
                 print(f"❌ Erro: {e}")
@@ -737,10 +583,10 @@ def main():
                             scores = [edge_score, spectral_score, color_score, temporal_score]
                             avg_score = np.mean([s for s in scores if s > 0])
                             
-                            if avg_score > 0.3:
+                            if avg_score > 0.2:
                                 color = (0, 0, 255)
                                 status = "SUSPEITO"
-                            elif avg_score > 0.15:
+                            elif avg_score > 0.1:
                                 color = (0, 165, 255)
                                 status = "MODERADO"
                             else:
@@ -800,24 +646,14 @@ def main():
                 
                 print(f"\n🔄 Analisando imagem: {os.path.basename(image_path)}")
                 
-                # Informações do arquivo
-                try:
-                    file_size = os.path.getsize(image_path) / (1024 * 1024)  # MB
-                    height, width = frame.shape[:2]
-                    print(f"📦 Arquivo: {file_size:.1f} MB • {width}x{height}")
-                except:
-                    pass
-                
                 analysis = detector.analyze_frame(frame)
                 
-                # Monta o dicionário de análises SEM agregação
+                # Monta análises para relatório
                 analyses = {}
                 for analysis_type in ['edge_analysis', 'spectral_analysis', 'color_analysis', 'residual_analysis']:
                     if analysis_type in analysis and isinstance(analysis[analysis_type], dict):
-                        # Pega o score correto baseado no nome da chave
                         analysis_data = analysis[analysis_type]
                         
-                        # Mapeia o nome correto do score
                         score = 0
                         if 'edge_score' in analysis_data:
                             score = analysis_data['edge_score']
@@ -827,10 +663,7 @@ def main():
                             score = analysis_data['color_score']
                         elif 'residual_score' in analysis_data:
                             score = analysis_data['residual_score']
-                        elif 'score' in analysis_data:
-                            score = analysis_data['score']
                         
-                        # Cria estrutura padronizada para o relatório
                         analyses[analysis_type] = {
                             'score': float(score),
                             'details': analysis_data.get('details', {})
@@ -849,10 +682,6 @@ def main():
                 print(f"🔍 INDICADORES ANALISADOS:")
                 print(f"{'='*40}")
                 
-                # Detalhes de cada análise
-                suspicious_found = []
-                normal_found = []
-                
                 friendly_names = {
                     'edge_analysis': '🔲 Análise de Bordas',
                     'spectral_analysis': '📊 Análise Espectral (FFT/DCT)',
@@ -868,74 +697,9 @@ def main():
                     if status == 'SUSPEITO':
                         print(f"🚨 {name}")
                         print(f"   Status: {status} | Score: {score:.3f}")
-                        
-                        details = result.get('details', {})
-                        if analysis_name == 'edge_analysis':
-                            edge_density = details.get('edge_density', 0)
-                            edge_variance = details.get('edge_variance', 0)
-                            print(f"   → Densidade de bordas: {edge_density:.4f}")
-                            print(f"     📊 Referência: Normal 0.05-0.15 | Suspeito >0.25")
-                            print(f"   → Variância de bordas: {edge_variance:.2f}")
-                            print(f"     📊 Referência: Normal <5000 | Suspeito >15000")
-                            print(f"   → Problema: Bordas inconsistentes ou muito regulares")
-                            
-                        elif analysis_name == 'spectral_analysis':
-                            freq_ratio = details.get('freq_ratio', 0)
-                            dct_variance = details.get('dct_variance', 0)
-                            freq_interp = details.get('freq_interpretation', 'N/A')
-                            dct_interp = details.get('dct_interpretation', 'N/A')
-                            print(f"   → Razão alta/baixa frequência: {freq_ratio:.6f}")
-                            print(f"     📊 Referência: Normal 0.01-0.5 | Suspeito <0.001 ou >0.5")
-                            print(f"   → Interpretação: {freq_interp}")
-                            print(f"   → Variância DCT: {dct_variance:.6f}")
-                            print(f"     📊 Referência: Normal 0.001-0.1 | Suspeito <0.001 ou >0.1")
-                            print(f"   → Interpretação: {dct_interp}")
-                            
-                        elif analysis_name == 'color_analysis':
-                            avg_inconsistency = details.get('average_inconsistency', 0)
-                            sat_mean = details.get('saturation_mean', 0)
-                            sat_interp = details.get('saturation_interpretation', 'N/A')
-                            print(f"   → Inconsistência média: {avg_inconsistency:.4f}")
-                            print(f"     📊 Referência: Normal <0.2 | Suspeito >0.2")
-                            print(f"   → Saturação média: {sat_mean:.1f}")
-                            print(f"     📊 Referência: Normal 50-200 | Suspeito <50 ou >200")
-                            print(f"   → Interpretação: {sat_interp}")
-                            
-                            # Mostra problemas por canal
-                            channel_stats = details.get('channel_stats', {})
-                            for channel, stats in channel_stats.items():
-                                interpretation = stats.get('interpretation', 'Normal')
-                                if interpretation != 'Normal':
-                                    mean_diff = stats.get('mean_diff', 0)
-                                    print(f"     • Canal {channel}: {interpretation}")
-                                    print(f"       Diferença: {mean_diff:.1f} (Ref: Normal <20)")
-                                    
-                        elif analysis_name == 'residual_analysis':
-                            residual_std = details.get('residual_std', 0)
-                            residual_mean = details.get('residual_mean', 0)
-                            print(f"   → Desvio residual: {residual_std:.2f}")
-                            print(f"     📊 Referência: Normal <5.0 | Suspeito >5.0")
-                            print(f"   → Média residual: {residual_mean:.2f}")
-                            print(f"     📊 Referência: Normal <10.0 | Suspeito >10.0")
-                            print(f"   → Problema: Possíveis halos ou transições artificiais")
-                        
-                        suspicious_found.append(name)
-                        
                     else:
                         print(f"✅ {name}")
                         print(f"   Status: {status} | Score: {score:.3f}")
-                        normal_found.append(name)
-                
-                print(f"\n{'='*40}")
-                print(f"📈 RESUMO:")
-                print(f"{'='*40}")
-                print(f"🚨 Indicadores SUSPEITOS ({len(suspicious_found)}):")
-                for indicator in suspicious_found:
-                    print(f"   • {indicator}")
-                
-                print(f"\n✅ Indicadores NORMAIS ({len(normal_found)}):")
-                for indicator in normal_found:
-                    print(f"   • {indicator}")
                 
                 print(f"\n{'='*40}")
                 print(f"💡 RECOMENDAÇÕES:")
@@ -943,60 +707,16 @@ def main():
                 for i, rec in enumerate(report['recommendations'], 1):
                     print(f"{i}. {rec}")
                 
-                # Interpretação do nível de confiança
-                confidence = report['confidence_level']
-                print(f"\n📊 INTERPRETAÇÃO DA CONFIANÇA ({confidence:.2f}):")
-                if confidence >= 0.7:
-                    print("   🔴 ALTA - Forte evidência de manipulação")
-                elif confidence >= 0.4:
-                    print("   🟡 MÉDIA - Alguns sinais suspeitos, investigar mais")
-                else:
-                    print("   🟢 BAIXA - Poucos sinais de manipulação")
-                
-                print(f"\n{'='*40}")
-                print(f"🎯 CONTEXTO PARA IMAGENS:")
-                print(f"{'='*40}")
-                print(f"📸 Imagens estáticas não possuem componente temporal")
-                print(f"🔍 Foco nas análises: Bordas, Espectral, Cores e Residual")
-                print(f"⚠️  Qualidade da imagem afeta significativamente os resultados")
-                if len(suspicious_found) >= 2:
-                    print(f"🚨 Múltiplos indicadores sugerem possível edição")
-                elif len(suspicious_found) >= 1:
-                    print(f"🔍 Um indicador pode ser devido à compressão/qualidade")
-                else:
-                    print(f"✅ Padrões consistentes com imagem autêntica")
-                
-                # Salva relatório
                 filename = f"relatorio_imagem_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
                 with open(filename, 'w', encoding='utf-8') as f:
                     json.dump(report, f, indent=2, ensure_ascii=False, default=str)
                 print(f"\n💾 Relatório completo salvo: {filename}")
                 
-                # Pergunta se quer ver dados técnicos
-                tech_details = input(f"\n🔧 Mostrar dados técnicos detalhados? (s/n): ").lower().strip()
-                if tech_details == 's':
-                    print(f"\n{'='*40}")
-                    print(f"🔧 DADOS TÉCNICOS:")
-                    print(f"{'='*40}")
-                    for analysis_name, result in report['detailed_analysis'].items():
-                        details = result.get('details', {})
-                        print(f"\n{analysis_name.replace('_', ' ').title()}:")
-                        if isinstance(details, dict):
-                            for key, value in details.items():
-                                if isinstance(value, dict):
-                                    print(f"  {key}:")
-                                    for subkey, subvalue in value.items():
-                                        print(f"    {subkey}: {subvalue}")
-                                else:
-                                    print(f"  {key}: {value}")
-                        else:
-                            print(f"  {details}")
-                
             except Exception as e:
                 print(f"❌ Erro: {e}")
         
         elif choice == "4":
-            print("\n⚙️ THRESHOLDS ATUAIS:")
+            print("\n⚙️ THRESHOLDS ATUAIS (CORRIGIDOS):")
             for key, value in detector.thresholds.items():
                 print(f"   {key}: {value}")
             
